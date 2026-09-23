@@ -1,11 +1,13 @@
 /* =========================================================
    Myreliablecleanup — Site scripts
-   Vanilla JS. No external dependencies, no network calls.
+   Vanilla JS. No external dependencies.
    ========================================================= */
 (function () {
   'use strict';
 
-  var BUSINESS_EMAIL = 'blankenship668@gmail.com';
+  // Quote/contact forms post here; the endpoint creates or updates
+  // the lead in the GoHighLevel sub-account.
+  var LEAD_ENDPOINT = '/api/ghl-lead';
 
   /* ---------------------------------------------------
      1. Mobile navigation
@@ -101,9 +103,10 @@
 
   /* ---------------------------------------------------
      5. Quote / contact form
-     Validates in the browser, then hands the message to the
-     visitor's own email client via a mailto: link. No server,
-     no third-party API, no environment variables.
+     Validates in the browser, then posts the lead to
+     /api/ghl-lead, which creates or updates the contact in the
+     GoHighLevel sub-account, tags it "website-lead", and stores
+     the message. A thank-you note replaces the button state.
      --------------------------------------------------- */
   function initForms() {
     var forms = document.querySelectorAll('form[data-quote-form]');
@@ -111,6 +114,21 @@
 
     forms.forEach(function (form) {
       var status = form.querySelector('.form-status');
+      var submitBtn = form.querySelector('[type="submit"]');
+      var submitLabel = submitBtn ? submitBtn.innerHTML : '';
+      var sending = false;
+
+      function formName() {
+        return form.getAttribute('data-form-name') || 'Website Quote Form';
+      }
+
+      function showStatus(kind, html) {
+        if (!status) return;
+        status.className = 'form-status is-' + kind;
+        status.innerHTML = html;
+        status.setAttribute('tabindex', '-1');
+        status.focus();
+      }
 
       function setError(field, message) {
         var wrap = field.closest('.field');
@@ -183,6 +201,7 @@
 
       form.addEventListener('submit', function (e) {
         e.preventDefault();
+        if (sending) return;
 
         // Honeypot: silently succeed for bots, send nothing.
         var hp = form.querySelector('[name="company_website"]');
@@ -204,46 +223,71 @@
         };
 
         var name = get('name');
-        var phone = get('phone');
-        var email = get('email');
-        var service = get('service');
-        var location = get('location');
-        var timing = get('timing');
-        var details = get('details');
+        var parts = name.split(/\s+/).filter(Boolean);
 
-        var subject = 'Quote request' + (service ? ' — ' + service : '') + ' — ' + (name || 'Website enquiry');
+        var payload = {
+          name: name,
+          firstName: parts[0] || '',
+          lastName: parts.slice(1).join(' '),
+          phone: get('phone'),
+          email: get('email'),
+          service: get('service'),
+          location: get('location'),
+          timing: get('timing'),
+          details: get('details'),
+          formName: formName(),
+          pageUrl: window.location.href
+        };
 
-        var lines = [
-          'New quote request from the Myreliablecleanup website',
-          '',
-          'Name: ' + name,
-          'Phone: ' + phone,
-          'Email: ' + (email || 'Not provided'),
-          'Service needed: ' + (service || 'Not specified'),
-          'Job location: ' + (location || 'Not provided'),
-          'Preferred timing: ' + (timing || 'Not specified'),
-          '',
-          'Job details:',
-          details
-        ];
-
-        var href = 'mailto:' + BUSINESS_EMAIL +
-          '?subject=' + encodeURIComponent(subject) +
-          '&body=' + encodeURIComponent(lines.join('\n'));
-
-        window.location.href = href;
-
+        sending = true;
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.innerHTML = 'Sending&hellip;';
+        }
         if (status) {
-          status.className = 'form-status is-success';
-          status.innerHTML =
-            'Thanks, ' + escapeHtml(name.split(' ')[0] || 'there') + '! Your email app should now be open with ' +
-            'your request ready to send &mdash; just hit send. In a hurry? Call us directly at ' +
-            '<a href="tel:+19403721737">(940) 372-1737</a>.';
-          status.setAttribute('tabindex', '-1');
-          status.focus();
+          status.className = 'form-status';
+          status.textContent = 'Sending your request…';
         }
 
-        form.reset();
+        function restoreButton() {
+          sending = false;
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = submitLabel;
+          }
+        }
+
+        fetch(LEAD_ENDPOINT, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        }).then(function (res) {
+          return res.json().catch(function () { return {}; }).then(function (data) {
+            return { ok: res.ok && data.ok !== false, data: data };
+          });
+        }).then(function (result) {
+          restoreButton();
+
+          if (!result.ok) {
+            showStatus('error', escapeHtml(
+              result.data.error ||
+              "We couldn't send your request just now. Please call us and we'll get you booked in."
+            ) + ' <a href="tel:+19403721737">(940) 372-1737</a>');
+            return;
+          }
+
+          showStatus('success',
+            'Thanks, ' + escapeHtml(parts[0] || 'there') + '! Your request is in &mdash; we\'ve got your ' +
+            'details and we\'ll get back to you with a price, usually within a few hours. ' +
+            'In a hurry? Call us directly at <a href="tel:+19403721737">(940) 372-1737</a>.');
+
+          form.reset();
+        }).catch(function () {
+          restoreButton();
+          showStatus('error',
+            'Something went wrong sending your request. Please call us at ' +
+            '<a href="tel:+19403721737">(940) 372-1737</a> and we\'ll sort it out.');
+        });
       });
     });
   }

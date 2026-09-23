@@ -31,6 +31,7 @@ python3 -m http.server 8000
 index.html, services.html, about.html, reviews.html, contact.html
 css/styles.css      Design tokens + all component styles
 js/main.js          Nav, FAQ accordion, form validation, scroll reveal
+api/ghl-lead.js     Serverless endpoint — sends form leads to GoHighLevel
 assets/favicon.svg  Favicon / logo mark
 robots.txt, sitemap.xml
 ```
@@ -39,10 +40,15 @@ robots.txt, sitemap.xml
 
 - **Click-to-call** in the top bar, header, hero, every CTA band, and a sticky
   bottom call bar on mobile.
-- **Quote form** validates in the browser, then hands the message to the
-  visitor's own email client via a `mailto:` link addressed to the business.
-  There is no backend and no third-party form service, so no keys or
-  environment variables are required.
+- **Quote form** validates in the browser, then posts to `/api/ghl-lead`, which
+  creates or updates the contact in the GoHighLevel sub-account
+  (location `Z7fPHa6A0oxgVKIkRW3Y`) with first name, last name, phone and email,
+  sets the custom fields **Lead Source** = `Website` and **Website Form** = the
+  form name, adds the **website-lead** tag, and saves the message as a contact
+  note. A thank-you message is shown after submit.
+  Requires one environment variable: `GHL_API_KEY`, a GoHighLevel Private
+  Integration token with contact and custom-field scopes (`GHL_LOCATION_ID`
+  optionally overrides the location).
 - Service cards link to `contact.html?service=…`, which preselects the matching
   option in the quote form.
 - Semantic HTML, skip link, ARIA labelling on the nav toggle and form errors,
