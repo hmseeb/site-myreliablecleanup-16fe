@@ -2,3 +2,4 @@ User-agent: *
 Allow: /
 
 Sitemap: /sitemap.xml
+Sitemap: https://site-myreliablecleanup-16fe.vercel.app/sitemap.xml
